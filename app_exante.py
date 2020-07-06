@@ -10,10 +10,10 @@ from dash.dependencies import Input, Output, State
 import dash_html_components as html
 import dash_core_components as dcc
 import dash
-import ALM_kit
+from CSModules import ALM_kit
 import numpy as np
 from scipy.optimize import minimize
-import Backend_Deterministic as BE
+import utility_exante as BE
 #Dash
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])

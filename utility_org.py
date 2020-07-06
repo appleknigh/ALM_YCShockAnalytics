@@ -29,70 +29,97 @@ import pandas as pd
 from scipy.optimize import minimize
 import quandl
 
-def getfit(t1='2000-01-02', t2='2020-12-02'):
-    #Load data
-    df_YieldC = quandl.get(
-        "USTREASURY/YIELD", authtoken="4_zrDSANo7hMt_uhyzQy")
-    df_YieldC.reset_index(level=0, inplace=True)
-    df_YieldC['Date'] = pd.to_datetime(df_YieldC['Date'], format="%m/%d/%Y")
+#%% Get data
 
-    #NS Cure fit
-    t_cal = df_YieldC['Date']
-    i_range = np.where((t_cal > t1) & (t_cal < t2))
+df_YieldCurve = quandl.get("USTREASURY/YIELD", authtoken="4_zrDSANo7hMt_uhyzQy")
+df_YieldCurve.reset_index(level=0, inplace=True)
+df_YieldCurve['Date'] = pd.to_datetime(df_YieldCurve['Date'], format="%m/%d/%Y")
 
-    t = np.array([0.08333333, 0.16666667, 0.25,
-                  0.5, 1, 2, 3, 5, 7, 10, 20, 30])
-    y = np.array(df_YieldC.iloc[:, 1:]).astype(float)[i_range]
-    fit_par = pd.DataFrame(np.apply_along_axis(
-        lambda x: ALM_kit.ns_par(t, x), axis=1, arr=y))
-    return {'df_YieldC': df_YieldC, 't_cal': t_cal.iloc[i_range], 'tact': t, 'y': y, 'fit_par': fit_par}
+df_mort = pd.read_csv("Mx_2019.csv", sep=',')
+
+#%% fit data
+calendar_t_all = df_YieldCurve['Date']
+t1 = '2019-01-02'
+t2 = '2020-04-02'
+x_range = [t1,t2]
+i_range = np.where((calendar_t_all > t1) & (calendar_t_all < t2))
+
+t = np.array([0.08333333, 0.16666667, 0.25, 0.5, 1, 2, 3, 5, 7, 10, 20, 30])
+y = np.array(df_YieldCurve.iloc[:, 1:]).astype(float)[i_range]
+t_cal = calendar_t_all.iloc[i_range]
+fit_par = np.apply_along_axis(lambda x: ALM_kit.ns_par(t, x), axis=1, arr=y)
+
+#%% Cashflow for asset and labilities
+cf_bond_L, t_bond_L = ALM_kit.bond_cashflow(1000, 30, 2.5, 1)
+cf_bond_M, t_bond_M = ALM_kit.bond_cashflow(1000, 10, 2, 1)
+cf_bond_S, t_bond_S = ALM_kit.bond_cashflow(1000, 2, 1, 1)
+cf_bonds = np.array([cf_bond_L,
+                     np.append(cf_bond_M, np.repeat(
+                         0, cf_bond_L.shape[0]-cf_bond_M.shape[0])),
+                     np.append(cf_bond_S, np.repeat(0, cf_bond_L.shape[0]-cf_bond_S.shape[0]))])
+cf_weights = np.array([1.8, 0.2, 2.5])  # Bond weight (Duration matched)
+
+cf_singleasset = np.dot(cf_weights, cf_bonds)
+cf_liability, t_liability = ALM_kit.liability_cashflow(
+    df_mort.loc[60:]['Total'], 3000*12)
+
+#%% PV at time 1
+t1 = 1
+
+# Present value of liability
+PV_liabilities, dur_liabilities = ALM_kit.PV_cashflow(
+    cf_liability, t_liability, fit_ns=fit_par[t1])
+
+# Present value of asset
+PV_asset_single, dur_asset = ALM_kit.PV_cashflow(
+    cf_singleasset, t_bond_L, fit_ns=fit_par[t1])
+N_bond = PV_liabilities/PV_asset_single
+PV_asset, dur_asset = ALM_kit.PV_cashflow(
+    N_bond*cf_singleasset, t_bond_L, fit_ns=fit_par[t1])
+
+#Funding ratio test
+FR = PV_asset/PV_liabilities
+print(FR)
 
 
-def PVCashflow_AL(forecast_data, bond_weight=[0.363, 0.447, 0.19], N=5000):
+# %% Factor analysis between t1 and t2
+t1 = 0
+t2 = 1
+fit_par_sim = fit_par[0:2]
+fit_par_sim[1] = fit_par[0]
 
-    #Asset CF generate
-    cf_bond_L, t_bond_L = ALM_kit.bond_cashflow(1000, 30, 2.5, 1)
-    cf_bond_M, _ = ALM_kit.bond_cashflow(1000, 10, 2, 1)
-    cf_bond_S, _ = ALM_kit.bond_cashflow(1000, 2, 1, 1)
-    cf_bonds = np.array([cf_bond_L,
-                         np.append(cf_bond_M, np.repeat(
-                             0, cf_bond_L.shape[0]-cf_bond_M.shape[0])),
-                         np.append(cf_bond_S, np.repeat(0, cf_bond_L.shape[0]-cf_bond_S.shape[0]))])
-    cf_weights = np.array(bond_weight)  # Bond weight (Duration matched)
-    cf_singleasset = np.dot(cf_weights, cf_bonds)
-
-    #Liabilty CF generate
-    df_mort = pd.read_csv("Mx_2019.csv", sep=',')
-    cf_liability, t_liability = ALM_kit.liability_cashflow(
-        df_mort.loc[60:]['Total'], 3000*12)
-
-    LCF_base,LDur_base = ALM_kit.PV_cashflow(cf_liability, t_liability,
-                               fit_ns=forecast_data['fit_par'])
-    ACF_base,ADur_base = ALM_kit.PV_cashflow(cf_singleasset, t_bond_L,
-                               fit_ns=forecast_data['fit_par'])
-    if N>1:                           
-        n_A = LCF_base/ACF_base
-        #PV
-        LCF = [ALM_kit.PV_cashflow(cf_liability, t_liability,
-                                fit_ns=forecast_data['Var_fit_par'][i]) for i in range(N)]
-        ACF = [ALM_kit.PV_cashflow(cf_singleasset*n_A, t_bond_L,
-                                fit_ns=forecast_data['Var_fit_par'][i]) for i in range(N)]
-    else:
-        n_A = None
-        LCF = [(None,None),(None,None)]
-        ACF = [(None,None),(None,None)]
-    
-    return {'cf_asset': cf_singleasset, 'cf_liability': cf_liability, 't_asset': t_bond_L, 't_liability': t_liability, 'ACFP': np.array(ACF)[:,0], 'LCFP': np.array(LCF)[:,0],'LDur':LDur_base,'ADur':ADur_base}
-
+fit_par_sim[1,0] = fit_par_sim[1,0] + 1
 
 #%%
+test_asset, test_liabiltiy, dur_asset_t2, dur_liabilities_t2 = ALM_kit.FactorAnalysis(
+    fit_par, t1, t2,
+    cf_asset=(N_bond*cf_singleasset), t_asset=t_bond_L,
+    cf_liability=cf_liability, t_liability=t_liability
+)
+
+test_asset_perc = np.append(
+    np.exp(np.diff(np.log(test_asset)))-1, test_asset[-1]/test_asset[0]-1)*100
+test_liabiltiy_perc = np.append(np.exp(
+    np.diff(np.log(test_liabiltiy)))-1, test_liabiltiy[-1]/test_liabiltiy[0]-1)*100
+
+PV_asset_t1t2 = [test_asset[0], test_asset[-1]]
+PV_liabilities_t1t2 = [test_liabiltiy[0], test_liabiltiy[-1]]
+PV_ALMis = [test_asset[0]-test_liabiltiy[0], test_asset[-1]-test_liabiltiy[-1]]
+
+PV_asset_t1t2_text = [str('${:,.2f}'.format(PV_asset_t1t2[i]))
+                      for i in range(len(PV_asset_t1t2))]
+PV_liabilities_t1t2_text = [str('${:,.2f}'.format(
+    PV_liabilities_t1t2[i])) for i in range(len(PV_liabilities_t1t2))]
+PV_ALMis_text = [str('${:,.2f}'.format(PV_ALMis[i]))
+                 for i in range(len(PV_ALMis))]
+
+movement_asset = [str(round(test_asset_perc[i]*100, 2)) +
+                  ' bps' for i in range(len(test_asset_perc))]
+movement_liability = [str(round(test_liabiltiy_perc[i]*100, 2)) +
+                      ' bps' for i in range(len(test_liabiltiy_perc))]
 
 
-
-
-
-
-#%% Figures
+#%% Figures######################################
 
 tPar = np.linspace(0, 30, 50)
 key_dur = np.array([2, 10, 30])
