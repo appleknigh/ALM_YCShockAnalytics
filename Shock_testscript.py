@@ -133,14 +133,14 @@ class graph_shock():
         self.trace = {'scatter_ycbase': go.Scatter(x=tPar,
                                                    y=ALM_kit.yfit_beta(
                                                        tPar, fit_par_sim[0]),
-                                                   mode='lines', line=dict(color='black'), showlegend=False),
+                                                   mode='lines', line=dict(color='black'), name='fitted base',showlegend=False),
                       'scatter_ycshock': go.Scatter(x=tPar,
                                                     y=ALM_kit.yfit_beta(
                                                         tPar, fit_par_sim[1]),
-                                                    mode='lines', line=dict(color='blue',dash='dash'), showlegend=False),
+                                                    mode='lines', line=dict(color='blue',dash='dash'), name='fitted shock', showlegend=False),
                       'scatter_cashflow_aseset': go.Scatter(x=tPar,
                                                             y=ALM_kit.yfit_beta(
-                                                                tPar, fit_par_sim[1]),
+                                                                tPar, fit_par_sim[1]),visible=False,
                                                             mode='lines', line=dict(color='red'), showlegend=False),
                       'scatter_cashflow_liability': go.Scatter(x=t_liability, y=cf_liability,
                                                                visible=False, line=dict(color='black'),
