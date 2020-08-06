@@ -21,7 +21,7 @@ df_ycfit = BE.getfit(t1='2020-01-02', t2='2020-12-02')
 
 #%%
 #Get cashflow for asset and liability
-x = BE.Cashflow_AL(bond_weight=3*50*np.array([1.8, 0.2, 2.5]))
+x = BE.Cashflow_AL(bond_weight=184.00592167*np.array([1.515, 1.0, 1]))
 cf_liability, t_liability = x.Gen_Liability()
 cf_asset, t_asset = x.Gen_Asset()
 
@@ -96,18 +96,18 @@ Pannel_Paramettric = [
         ], justify='center')]
 
 drop_terms = [
-    {'label': '1 mo', 'value': 0.08},
-    {'label': '2 mo', 'value': 0.17},
-    {'label': '3 mo', 'value': 0.25},
-    {'label': '6 mo', 'value': 0.5},
-    {'label': '1 yr', 'value': 1},
-    {'label': '2 yr', 'value': 2},
-    {'label': '3 years', 'value': 3},
-    {'label': '5 years', 'value': 5},
-    {'label': '7 years', 'value': 7},
-    {'label': '10 years', 'value': 10},
-    {'label': '20 years', 'value': 20},
-    {'label': '30 years', 'value': 30}]
+    {'label': '1 mo', 'value': df_ycfit['tact'][0]},
+    {'label': '2 mo', 'value': df_ycfit['tact'][1]},
+    {'label': '3 mo', 'value': df_ycfit['tact'][2]},
+    {'label': '6 mo', 'value': df_ycfit['tact'][3]},
+    {'label': '1 yr', 'value': df_ycfit['tact'][4]},
+    {'label': '2 yr', 'value': df_ycfit['tact'][5]},
+    {'label': '3 years', 'value': df_ycfit['tact'][6]},
+    {'label': '5 years', 'value': df_ycfit['tact'][7]},
+    {'label': '7 years', 'value': df_ycfit['tact'][8]},
+    {'label': '10 years', 'value': df_ycfit['tact'][9]},
+    {'label': '20 years', 'value': df_ycfit['tact'][10]},
+    {'label': '30 years', 'value': df_ycfit['tact'][11]}]
 
 Pannel_KeyDuration = [
     dbc.Row(
@@ -119,7 +119,7 @@ Pannel_KeyDuration = [
     dbc.Row(
         [
             dbc.Col(dcc.Dropdown(
-                id='drop_dur1', options=drop_terms, placeholder='Please pick a term'), width=6),
+                id='drop_dur1', options=drop_terms,value=df_ycfit['tact'][5]), width=6),
             dbc.Col(html.H6('x%'), id='val_dur1_base', width=3),
             dbc.Col(dcc.Input(id='val_dur1_diff',value='0',
                               style={'width': 80}), width=2)
@@ -133,7 +133,7 @@ Pannel_KeyDuration = [
     dbc.Row(
         [
             dbc.Col(dcc.Dropdown(
-                id='drop_dur2', options=drop_terms, placeholder='Please pick a term'), width=6),
+                id='drop_dur2', options=drop_terms, value=df_ycfit['tact'][7]), width=6),
             dbc.Col(html.H6('x%'), id='val_dur2_base', width=3),
             dbc.Col(dcc.Input(id='val_dur2_diff',value='0',
                               style={'width': 80}), width=2)
@@ -147,7 +147,7 @@ Pannel_KeyDuration = [
     dbc.Row(
         [
             dbc.Col(dcc.Dropdown(
-                id='drop_dur3', options=drop_terms, placeholder='Please pick a term'), width=6),
+                id='drop_dur3', options=drop_terms, value=df_ycfit['tact'][9]), width=6),
             dbc.Col(html.H6('x%'), id='val_dur3_base', width=3),
             dbc.Col(dcc.Input(id='val_dur3_diff',value='0',
                               style={'width': 80}), width=2)
@@ -155,9 +155,9 @@ Pannel_KeyDuration = [
 
 graph_2 = dbc.Card([
     dbc.Row(dbc.Col(dcc.Graph(id='graph_YC', figure=f1))),
-    dcc.Tabs(id='shock_tabs',value='tab-1',children=[
-        dcc.Tab(label='Key Duration',value='tab-1', children=Pannel_KeyDuration),
-        dcc.Tab(label='Parametric', value='tab-2',children=Pannel_Paramettric)
+    dcc.Tabs(id='shock_tabs',value='tab-2',children=[
+        dcc.Tab(label='Parametric', value='tab-2',children=Pannel_Paramettric),
+        dcc.Tab(label='Key Duration',value='tab-1', children=Pannel_KeyDuration)
     ]),
     dbc.Row(dbc.Col(html.Button('Submit', id='submit-button-state', n_clicks=0)))
 ])
@@ -199,10 +199,13 @@ app.layout = body
 #         children = [
 #             parse_contents(c, n, d) for c, n, d in
 #             zip(list_of_contents, list_of_names, list_of_dates)]
-#         return children
+#         return children val_dur2_base
 
 @app.callback(
     [
+        Output(component_id='val_dur1_base', component_property='children'),
+        Output(component_id='val_dur2_base', component_property='children'),
+        Output(component_id='val_dur3_base', component_property='children'),
         Output(component_id='beta0', component_property='children'),
         Output(component_id='val_level_base', component_property='children'),
         Output(component_id='val_level_diff', component_property='children'),
@@ -233,15 +236,20 @@ def update_figure(nclick,slider_level, slider_slope, slider_curve,tabs,keydur1,k
     # define parameters
     fit_par_sim = np.tile(df_ycfit['fit_par'].iloc[0], [2, 1])
 
+    # original rates        
+    t = df_ycfit['tact']
+    y2 = copy.deepcopy(df_ycfit['y'][0])
+
+    i_1 = t==keydur1
+    i_2 = t==keydur2
+    i_3 = t==keydur3
+
+    #Original rates
+    text_yi_1 = str(np.round(y2[i_1] , 2)) + ' %'
+    text_yi_2 = str(np.round(y2[i_2] , 2)) + ' %'
+    text_yi_3 = str(np.round(y2[i_3] , 2)) + ' %'
+
     if tabs == 'tab-1':
-        # original rates        
-        t = df_ycfit['tact']
-        y2 = copy.deepcopy(df_ycfit['y'][0])
-
-        i_1 = t==keydur1
-        i_2 = t==keydur2
-        i_3 = t==keydur3
-
         #Shocked rates
         y2[i_1] += float(sdur1)/100
         y2[i_2] += float(sdur2)/100
@@ -308,7 +316,7 @@ def update_figure(nclick,slider_level, slider_slope, slider_curve,tabs,keydur1,k
 
     # Stats for tab 1
 
-    return [
+    return [text_yi_1,text_yi_2,text_yi_3,
         text_level_beta, text_level_base, text_level_shock,
         text_slope_beta, text_slope_base, text_slope_shock,
         text_curve_beta, text_curve_base, text_curve_shock,
